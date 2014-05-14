@@ -36,22 +36,32 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer file.Close()
 
 	//create UDP connection
 	//allow user to specify TCP or UDP
 	destAddr, err := net.ResolveUDPAddr("udp",*destinationIP + ":" + *destinationPort)
 	con, err := net.DialUDP("udp",nil,destAddr)
 
-	scanner := bufio.NewScanner(file)
+	fileRead := bufio.NewReader(file)
 
 	for _ = range ticker.C {
 		for i := 0; i < *rate; i ++ {
-			EOFmet := scanner.Scan()
-			if EOFmet != true {
-				if *nonStop != true {
+			lineBuffer, _, err := fileRead.ReadLine()
+
+			if err != nil {
+				log.Println(err)
+				if *nonStop  {
+					file, _ := os.Open(*fileName)
+					fileRead = bufio.NewReader(file)
+					lineBuffer, _, err = fileRead.ReadLine()
+				} else {
+					log.Println("EOF")
 					os.Exit(0)
 				}
+
 			}
+
 			//Write format to syslog standard
 			var message []string
 			//add priority to string
@@ -61,7 +71,7 @@ func main() {
 			//Add in source IP/hostname
 			message = append(message,*sourceHost)
 			//add in payload
-			message = append(message,scanner.Text())
+			message = append(message,string(lineBuffer))
 
 			finalMessage := strings.Join(message," ")
 			con.Write([]byte(finalMessage))
@@ -69,8 +79,4 @@ func main() {
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		log.Println("Scanner err")
-		log.Fatal(err)
-	}
 }
