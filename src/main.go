@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+const (
+	msgBufSize = 4096
+)
+
 var destinationIP = flag.String("d", "127.0.0.1", "Specify destination IP (default: 127.0.0.1)")
 var sourceHost = flag.String("s","127.0.0.1", "Specify source hostname/IP for syslog header (default: 127.0.0.1)")
 var destinationPort = flag.String("p", "514", "Sepecify port (default: 514)")
@@ -23,20 +27,73 @@ var nonStop = flag.Bool("C",false,"Specify if the file should be continously rea
 //WebUI
 var enableWebUI = flag.Bool("w",false,"Enable WebIU for log sender (default: false) (To be added)")
 
-func calcSyslogPriority(f *int, s *int ) int {
-	return (*f * 8 ) + *s
+//create channels to handle listening to messages
+
+ type Message struct {
+	message []string
+	sourceHost *string
+	syslogFacility *int
+	syslogSeverity *int
+	syslogPriority int
 }
 
+func (m *Message) setMessageTime() {
+	m.message = append(m.message,time.Now().Format(time.RFC3339))
+}
+
+func (m *Message) setSyslogPriority() {
+	m.message = append(m.message,"<" + strconv.Itoa(m.syslogPriority) + ">")
+}
+
+func (m *Message) setSrcHost() {
+	m.message = append(m.message,*m.sourceHost)
+}
+
+func (m *Message) AddToMessage(s string) {
+	m.message = append(m.message,s)
+}
+
+func (m *Message) calcSyslogPriority(f *int, s *int ) {
+	m.syslogPriority = (*f * 8 ) + *s
+}
+
+func (m *Message) send(con net.Conn) {
+	finalMessage := strings.Join(m.message," ")
+	con.Write([]byte(finalMessage))
+	//log.Println(finalMessage)
+}
+
+func NewMessage(srcHost *string, f *int, s *int) Message {
+	msg := Message{sourceHost:srcHost,syslogFacility:f, syslogSeverity:s}
+	msg.calcSyslogPriority(f,s)
+	msg.setSyslogPriority()
+	msg.setMessageTime()
+	msg.setSrcHost()
+	return msg
+}
+
+/*handleMessages a go routine to handle read files */
+func handleMessages(conn net.Conn, rate *int, sendChannel chan Message) {
+	//ticker := time.NewTicker(time.Second * 1)
+	for {
+		select {
+			case msg := <-sendChannel:
+				msg.send(conn)
+		}
+	}
+}
+
+
 func main() {
-	ticker := time.NewTicker(time.Second * 1)
+	/* initialize channels */
+	sendChannel := make(chan Message, msgBufSize)
+	/* Parse command line flags */
 	flag.Parse()
-	syslogPriority := calcSyslogPriority(syslogFacility,syslogSeverity)
 
 	file, err := os.Open(*fileName)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer file.Close()
 
 	//create UDP connection
 	//allow user to specify TCP or UDP
@@ -45,38 +102,26 @@ func main() {
 
 	fileRead := bufio.NewReader(file)
 
-	for _ = range ticker.C {
-		for i := 0; i < *rate; i ++ {
-			lineBuffer, _, err := fileRead.ReadLine()
+	go handleMessages(con,rate,sendChannel)
 
-			if err != nil {
-				log.Println(err)
-				if *nonStop  {
-					file, _ := os.Open(*fileName)
-					fileRead = bufio.NewReader(file)
-					lineBuffer, _, err = fileRead.ReadLine()
-				} else {
-					log.Println("EOF")
-					os.Exit(0)
+	for {
+		ticker := time.NewTicker(time.Second * 1)
+		for _ = range ticker.C {
+			for i := 0; i < *rate; i ++ {
+				lineBuffer, _, err := fileRead.ReadLine()
+				if err != nil {
+					//log.Println(err)
+					if *nonStop  {
+						file, _ := os.Open(*fileName)
+						fileRead = bufio.NewReader(file)
+						lineBuffer, _, err = fileRead.ReadLine()
+					} else {
+					}
 				}
-
+				msg := NewMessage(sourceHost,syslogFacility,syslogSeverity)
+				msg.AddToMessage(string(lineBuffer))
+				sendChannel <- msg
 			}
-
-			//Write format to syslog standard
-			var message []string
-			//add priority to string
-			message = append(message,"<" + strconv.Itoa(syslogPriority) + ">")
-			//Add standard syslog timestamp RFC3339 format
-			message = append(message,time.Now().Format(time.RFC3339))
-			//Add in source IP/hostname
-			message = append(message,*sourceHost)
-			//add in payload
-			message = append(message,string(lineBuffer))
-
-			finalMessage := strings.Join(message," ")
-			con.Write([]byte(finalMessage))
-			log.Println(finalMessage)
 		}
 	}
-
 }
