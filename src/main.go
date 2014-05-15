@@ -6,9 +6,8 @@ import (
 	"log"
 	"os"
 	"net"
-	"strconv"
-	"strings"
 	"time"
+	"./lib/message"
 )
 
 const (
@@ -29,56 +28,13 @@ var enableWebUI = flag.Bool("w",false,"Enable WebIU for log sender (default: fal
 
 //create channels to handle listening to messages
 
- type Message struct {
-	message []string
-	sourceHost *string
-	syslogFacility *int
-	syslogSeverity *int
-	syslogPriority int
-}
-
-func (m *Message) setMessageTime() {
-	m.message = append(m.message,time.Now().Format(time.RFC3339))
-}
-
-func (m *Message) setSyslogPriority() {
-	m.message = append(m.message,"<" + strconv.Itoa(m.syslogPriority) + ">")
-}
-
-func (m *Message) setSrcHost() {
-	m.message = append(m.message,*m.sourceHost)
-}
-
-func (m *Message) AddToMessage(s string) {
-	m.message = append(m.message,s)
-}
-
-func (m *Message) calcSyslogPriority(f *int, s *int ) {
-	m.syslogPriority = (*f * 8 ) + *s
-}
-
-func (m *Message) send(con net.Conn) {
-	finalMessage := strings.Join(m.message," ")
-	con.Write([]byte(finalMessage))
-	//log.Println(finalMessage)
-}
-
-func NewMessage(srcHost *string, f *int, s *int) Message {
-	msg := Message{sourceHost:srcHost,syslogFacility:f, syslogSeverity:s}
-	msg.calcSyslogPriority(f,s)
-	msg.setSyslogPriority()
-	msg.setMessageTime()
-	msg.setSrcHost()
-	return msg
-}
-
 /*handleMessages a go routine to handle read files */
-func handleMessages(conn net.Conn, rate *int, sendChannel chan Message) {
+func handleMessages(conn net.Conn, rate *int, sendChannel chan message.Message) {
 	//ticker := time.NewTicker(time.Second * 1)
 	for {
 		select {
 			case msg := <-sendChannel:
-				msg.send(conn)
+				msg.Send(conn)
 		}
 	}
 }
@@ -86,7 +42,7 @@ func handleMessages(conn net.Conn, rate *int, sendChannel chan Message) {
 
 func main() {
 	/* initialize channels */
-	sendChannel := make(chan Message, msgBufSize)
+	sendChannel := make(chan message.Message, msgBufSize)
 	/* Parse command line flags */
 	flag.Parse()
 
@@ -118,7 +74,7 @@ func main() {
 					} else {
 					}
 				}
-				msg := NewMessage(sourceHost,syslogFacility,syslogSeverity)
+				msg := message.NewMessage(sourceHost,syslogFacility,syslogSeverity)
 				msg.AddToMessage(string(lineBuffer))
 				sendChannel <- msg
 			}
