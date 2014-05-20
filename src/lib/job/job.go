@@ -3,52 +3,61 @@ package job
 import (
   "os"
   "errors"
+  "net"
   "math/rand"
   "time"
+  "bufio"
+  "log"
   "lib/message"
+  "lib/job/jobmsg"
   "encoding/binary"
   "encoding/hex"
-  "lib/job/jobmsg"
 )
 
 type Job struct {
   ID string
-  rate int
-  syslogFacility int
-  syslogSeverity int
-  fileName string
-  fileHandle os.File
-  jobChan  chan
+  rate *int
+  syslogFacility *int
+  syslogSeverity *int
+  sourceHost *string
+  fileName *string
+  fileHandle *os.File
+  ctrlChannel chan jobmsg.JobMsg
   conn net.Conn
 }
 
-func NewJob(r int, sf int, ss int, file string, jc chan) (Job,error) {
+func NewJob(dip *string, dport *string,r *int, sf *int, ss *int, sh *string, file *string, cc chan jobmsg.JobMsg) (Job,error) {
+  destAddr, err := net.ResolveUDPAddr("udp", *dip+":"+*dport)
+  con, err := net.DialUDP("udp", nil, destAddr)
   j := Job{
     rate:r,
+    sourceHost: sh,
     syslogFacility: sf,
     syslogSeverity: ss,
     fileName: file,
-    jobChan: jc
+    ctrlChannel: cc,
+    conn:con,
   }
-  err := j.openFile()
-  j.genID()
+  err = j.openFile()
   return j,err
 }
 
-func (j *Job) genID () {
+func (j *Job) GenID () string {
   //generate new random ID
   rand.Seed( time.Now().UTC().UnixNano())
-  randNum := rand.Intn(18446744073709551615 - 1) + 1
+  randNum := rand.Uint32() + 1
   bytes := [8]byte{}
-  binary.LittleEndian.PutUint64(bytes[:],randNum)
-  j.ID = hex.EncodeToString(bytes[:s])
+  binary.LittleEndian.PutUint32(bytes[:],randNum)
+  j.ID = hex.EncodeToString(bytes[:])
+  return j.ID
 }
 
 func (j *Job) openFile() error {
-  file, err := os.Open(j.fileName)
+  file, err := os.Open("/home/rcameron/code/gogoLogs/src/" + *j.fileName)
   if err != nil {
     //handle file error
     //report back that the file cant be opened and why
+    log.Println(err)
     err = errors.New("Unable to open file")
   }
   j.fileHandle = file
@@ -56,7 +65,7 @@ func (j *Job) openFile() error {
 }
 
 func (j *Job) closeFile(){
-  j.fh.Close()
+  j.fileHandle.Close()
 }
 
 func (j *Job) Start(){
@@ -66,35 +75,20 @@ func (j *Job) Start(){
   fileRead := bufio.NewReader(j.fileHandle)
 
   for _ = range ticker.C {
-    for i := 0; i < *rate; i++ {
+    log.Println("tick",*j.rate)
+    for i := 0; i < *j.rate; i++ {
       lineBuffer, _, err := fileRead.ReadLine()
       if err != nil {
-        //log.Println(err)
+        log.Println(err)
         j.openFile()
         fileRead = bufio.NewReader(j.fileHandle)
         lineBuffer, _, err = fileRead.ReadLine()
       }
-      msg := message.NewMessage(sourceHost, syslogFacility, syslogSeverity)
+      msg := message.NewMessage(j.sourceHost, j.syslogFacility, j.syslogSeverity)
       msg.AddToMessage(string(lineBuffer))
+      log.Println(msg)
       msg.Send(j.conn)
     }
     //Check for close requests
-    select {
-      case jobMsg := <- j.jobChan:
-        if jobMsg.ID == j.ID {
-          //message is for me handle its request
-          if jobMsg.action == jobmsg.stop {
-            //exit go task
-            //send message job ID is stopping
-            j.closeFile()
-            return
-          } else if jobMsg.action == jobmsg.start {
-            //????
-          } else if jobMsg.action == jobmsg.restart{
-            //restart task
-            //this leaves the job configured but it forces it to restart
-          }
-        }
-    }
   }
 }

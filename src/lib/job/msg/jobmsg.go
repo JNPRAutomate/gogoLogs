@@ -6,7 +6,7 @@ const (
   restart = 3
 )
 
-type JobMsg stuct {
-  ID int //job that message is sent to
-  action int //action to send to job
+type JobMsg struct {
+  ID int
+  action int
 }

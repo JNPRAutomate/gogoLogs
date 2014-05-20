@@ -2,8 +2,13 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	"lib/job/jobmgr"
+	"lib/job/jobmsg"
 	"lib/job"
+	"strconv"
+	"lib/stats"
 	"github.com/gorilla/mux"
 )
 
@@ -11,17 +16,22 @@ import (
 type Handler struct {
 	HttpPort int
 	LogDir string
-	jobChan chan
-	statsChan chan
+	jobChan chan job.Job
+	ctrlChan chan jobmsg.JobMsg
+	statsChan chan stats.Stats
+	jobMgr jobmgr.JobMgr
 }
 
 /*NewHandler creates new handler and returns in */
-func NewHandler(jc chan, sc chan, p int, ld string) Handler {
+func NewHandler(cc chan jobmsg.JobMsg, sc chan stats.Stats, p int, ld string) Handler {
+	jc := make(chan job.Job,0)
 	h := Handler{
 		HttpPort:p,
-		jobChan:jc,
+		ctrlChan:cc,
 		statsChan:sc,
-		LogDir: ld
+		jobChan: jc,
+		jobMgr: jobmgr.NewJobMgr(jc, cc),
+		LogDir:ld,
 	}
 	return h
 }
@@ -39,7 +49,7 @@ func (h *Handler) startJob(w http.ResponseWriter, req *http.Request){
 
 	//create new job based upon request
 	//start job as go routine
-
+	var err error
 	//int values
 	var rate string
 	var jobRate int
@@ -47,68 +57,74 @@ func (h *Handler) startJob(w http.ResponseWriter, req *http.Request){
 	var syslogFacility string
 	var jobSyslogFacility int
 
-	var syslogPriority string
-	var jobSyslogPriority int
+	var syslogSeverity string
+	var jobsyslogSeverity int
 
 	//string values
 	var destHost string
 	var logFileName string
 	var protocol string
 	var sourceHost string
+	var port string
+	port = "514"
 
 
-
-	if sourceHost = req.FormValue("sourceHost"); sourceHost == nil {
+	if sourceHost = req.FormValue("sourceHost"); sourceHost != "" {
 
 	}
-	if syslogFacility = req.FormValue("syslogFacility"); sourceHost == nil {
-		if jobSyslogFacility , err = strconv.Atoi; err != nil {
+	if syslogFacility = req.FormValue("syslogFacility"); syslogFacility != "" {
+		if jobSyslogFacility , err = strconv.Atoi(syslogFacility); err != nil {
 
 		}
 	}
-	if syslogPriority = req.FormValue("syslogPriority"); sourceHost == nil {
-		if jobSyslogPriority , err = strconv.Atoi; err != nil {
+	if syslogSeverity = req.FormValue("syslogSeverity"); syslogSeverity != "" {
+		if jobsyslogSeverity , err = strconv.Atoi(syslogSeverity); err != nil {
 
 		}
 	}
-	if destHost = req.FormValue("destHost"); sourceHost == nil {
+	if destHost = req.FormValue("destHost"); destHost != "" {
 
 	}
-	if logFileName = req.FormValue("logFileName"); sourceHost == nil {
+	if logFileName = req.FormValue("logFileName"); logFileName != "" {
 
 	}
-	if protocol = req.FormValue("protocol"); sourceHost == nil {
+	if protocol = req.FormValue("protocol"); protocol != "" {
 
 	}
-	if rate = req.FormValue("rate"); rate == nil {
+	if rate = req.FormValue("rate"); rate != "" {
 		if jobRate, err = strconv.Atoi(rate); err != nil {
 
 		}
 	}
-	var job job.Job
-	job,err = job.NewJob(jobRate,jobSyslogFacility,jobSyslogPriority,logFileName,h.jobChan)
+	var newJob job.Job
+	if newJob,err = job.NewJob(&destHost,&port,&jobRate,&jobSyslogFacility,&jobsyslogSeverity,&sourceHost,&logFileName,h.ctrlChan); err != nil {
+		log.Println(err,logFileName)
+	} else {
+		h.jobMgr.MainChannel <-newJob
+	}
+	fmt.Fprintf(w, "Hi there, I love %s!", req.URL.Path[1:])
 }
 
 /*stopJob stops log job*/
-func (h *Handler) stopJob(){
+func (h *Handler) stopJob(w http.ResponseWriter, req *http.Request){
 	//request job to stop based on ID
 	//return if stop was success or failure
 }
 
 /*statusJob checks job status*/
-func (h *Handler) statusJob(){
+func (h *Handler) statusJob(w http.ResponseWriter, req *http.Request){
 	//check on job with ID
 	//return job status
 }
 
 /*statsJob pulls stats for current job*/
-func (h *Handler) statsJob(){
+func (h *Handler) statsJob(w http.ResponseWriter, req *http.Request){
 	//check for stats on job
 	//return stats struct
 }
 
 /*manage Main UI access */
-func (h *Handler) manage() {
+func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 	//handle access to basic UI
 	//WebUI Mode
 	//list files in specified directory
@@ -122,10 +138,11 @@ func (h *Handler) Start() {
 	//setup handlers and listeners
 	reqRouter := mux.NewRouter()
 	reqRouter.HandleFunc("/job/start",h.startJob)
-	reqRouter.HandleFunc("/job/stop/{ID}",h.startJob)
-	reqRouter.HandleFunc("/job/status/{ID}",h.startJob)
-	reqRouter.HandleFunc("/job/stats/{ID}",h.startJob)
+	reqRouter.HandleFunc("/job/stop/{ID}",h.stopJob)
+	reqRouter.HandleFunc("/job/status/{ID}",h.statusJob)
+	reqRouter.HandleFunc("/job/stats/{ID}",h.statsJob)
 	reqRouter.HandleFunc("/",h.manage)
 	http.Handle("/",reqRouter)
+	go h.jobMgr.Run()
 	http.ListenAndServe(":"+strconv.Itoa(h.HttpPort),nil)
 }

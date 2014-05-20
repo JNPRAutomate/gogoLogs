@@ -1,8 +1,10 @@
 package main
 
 import (
-	"./lib/webui/handler"
-	"./lib/message"
+	"lib/webui/handlers"
+	"lib/message"
+	"lib/job/jobmsg"
+	"lib/stats"
 	"bufio"
 	"flag"
 	"log"
@@ -88,6 +90,10 @@ func main() {
 			}
 		}
 	} else if *enableWebUI == true {
-		handler.NewHandler()
+		//create channels
+		cc := make(chan jobmsg.JobMsg,0)
+		sc := make(chan stats.Stats,0)
+		handy := handlers.NewHandler(cc,sc,8080,".")
+		handy.Start()
 	}
 }
