@@ -46,7 +46,7 @@ func (j *Job) GenID () string {
   //generate new random ID
   rand.Seed( time.Now().UTC().UnixNano())
   randNum := rand.Uint32() + 1
-  bytes := [8]byte{}
+  bytes := [4]byte{}
   binary.LittleEndian.PutUint32(bytes[:],randNum)
   j.ID = hex.EncodeToString(bytes[:])
   return j.ID

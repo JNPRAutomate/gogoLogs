@@ -7,17 +7,17 @@ import (
 
 type JobMgr struct {
   MainChannel chan job.Job
-  ctrlChannel chan jobmsg.JobMsg
+  CtrlChannel chan jobmsg.JobMsg
   Jobs []JobHook
 }
 
 type JobHook struct {
   ID string
-  ctrlChannel chan jobmsg.JobMsg
+  CtrlChannel chan jobmsg.JobMsg
 }
 
 func NewJobMgr( mc chan job.Job, cc chan jobmsg.JobMsg) JobMgr {
-  jm := JobMgr{MainChannel: mc, ctrlChannel: cc}
+  jm := JobMgr{MainChannel: mc, CtrlChannel: cc}
   return jm
 }
 
@@ -29,17 +29,20 @@ func(jm *JobMgr) Run() {
         newCtrlChan := make(chan jobmsg.JobMsg,0)
         newJobHook := JobHook{
           ID: newJobID,
-          ctrlChannel:newCtrlChan,
+          CtrlChannel:newCtrlChan,
         }
         jm.Jobs = append(jm.Jobs,newJobHook)
         go newJob.Start()
+      case newJobMsg := <- jm.CtrlChannel:
+        newJobHook := jm.findJob(&newJobMsg.ID)
+        newJobHook.CtrlChannel <- jobmsg.JobMsg{Action:jobmsg.Stop}
     }
   }
 }
 
 func(jm *JobMgr) Stop(id *string) error {
   stopJob := jm.findJob(id)
-  stopJob.ctrlChannel <- jobmsg.JobMsg{Action:jobmsg.Stop}
+  stopJob.CtrlChannel <- jobmsg.JobMsg{Action:jobmsg.Stop}
   return nil
 }
 
@@ -48,11 +51,11 @@ func(jm *JobMgr) removeJobHook(id *string) error {
   return nil
 }
 
-func(jm *JobMgr) findJob(id *string) JobHook {
+func(jm *JobMgr) findJob(id *string) *JobHook {
   for item := range jm.Jobs {
     if &jm.Jobs[item].ID == id {
-      return jm.Jobs[item]
+      return &jm.Jobs[item]
     }
   }
-  return JobHook{ID:""}
+  return &JobHook{ID:""}
 }

@@ -100,6 +100,8 @@ func (h *Handler) startJob(w http.ResponseWriter, req *http.Request){
 	if newJob,err = job.NewJob(&destHost,&port,&jobRate,&jobSyslogFacility,&jobsyslogSeverity,&sourceHost,&logFileName,h.ctrlChan); err != nil {
 		log.Println(err,logFileName)
 	} else {
+		ID := newJob.GenID()
+		fmt.Println(ID)
 		h.jobMgr.MainChannel <-newJob
 	}
 	fmt.Fprintf(w, "Hi there, I love %s!", req.URL.Path[1:])
@@ -109,6 +111,12 @@ func (h *Handler) startJob(w http.ResponseWriter, req *http.Request){
 func (h *Handler) stopJob(w http.ResponseWriter, req *http.Request){
 	//request job to stop based on ID
 	//return if stop was success or failure
+	vars := mux.Vars(req)
+	ID := vars["ID"]
+	fmt.Println(ID)
+	//send message to stop job
+	h.jobMgr.CtrlChannel <- jobmsg.JobMsg{ID:ID,Action:jobmsg.Stop}
+	fmt.Fprintf(w, "Hi there, I love %s!", req.URL.Path[1:])
 }
 
 /*statusJob checks job status*/
