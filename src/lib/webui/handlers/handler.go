@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
+	"fmt"
 	"net/http"
 	"lib/job/jobmgr"
 	"lib/job/jobmsg"
@@ -24,7 +24,7 @@ type Handler struct {
 
 /*NewHandler creates new handler and returns in */
 func NewHandler(cc chan jobmsg.JobMsg, sc chan stats.Stats, p int, ld string) Handler {
-	jc := make(chan job.Job,0)
+	jc := make(chan job.Job,4096)
 	h := Handler{
 		HttpPort:p,
 		ctrlChan:cc,
@@ -97,12 +97,11 @@ func (h *Handler) startJob(w http.ResponseWriter, req *http.Request){
 		}
 	}
 	var newJob job.Job
-	if newJob,err = job.NewJob(&destHost,&port,&jobRate,&jobSyslogFacility,&jobsyslogSeverity,&sourceHost,&logFileName,h.ctrlChan); err != nil {
+	if newJob,err = job.NewJob(&destHost,&port,&jobRate,&jobSyslogFacility,&jobsyslogSeverity,&sourceHost,&logFileName,make(chan jobmsg.JobMsg,4096)); err != nil {
 		log.Println(err,logFileName)
 	} else {
-		ID := newJob.GenID()
-		fmt.Println(ID)
-		h.jobMgr.MainChannel <-newJob
+		newJob.GenID()
+		h.jobMgr.MainChannel <- newJob
 	}
 	fmt.Fprintf(w, "Hi there, I love %s!", req.URL.Path[1:])
 }
@@ -113,9 +112,9 @@ func (h *Handler) stopJob(w http.ResponseWriter, req *http.Request){
 	//return if stop was success or failure
 	vars := mux.Vars(req)
 	ID := vars["ID"]
-	fmt.Println(ID)
 	//send message to stop job
-	h.jobMgr.CtrlChannel <- jobmsg.JobMsg{ID:ID,Action:jobmsg.Stop}
+	newMsg := jobmsg.JobMsg{ID:ID,Action:jobmsg.Stop}
+	h.ctrlChan <- newMsg
 	fmt.Fprintf(w, "Hi there, I love %s!", req.URL.Path[1:])
 }
 

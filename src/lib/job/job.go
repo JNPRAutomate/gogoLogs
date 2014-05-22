@@ -22,7 +22,7 @@ type Job struct {
   sourceHost *string
   fileName *string
   fileHandle *os.File
-  ctrlChannel chan jobmsg.JobMsg
+  CtrlChannel chan jobmsg.JobMsg
   conn net.Conn
 }
 
@@ -35,7 +35,7 @@ func NewJob(dip *string, dport *string,r *int, sf *int, ss *int, sh *string, fil
     syslogFacility: sf,
     syslogSeverity: ss,
     fileName: file,
-    ctrlChannel: cc,
+    CtrlChannel: cc,
     conn:con,
   }
   err = j.openFile()
@@ -47,7 +47,8 @@ func (j *Job) GenID () string {
   rand.Seed( time.Now().UTC().UnixNano())
   randNum := rand.Uint32() + 1
   bytes := [4]byte{}
-  binary.LittleEndian.PutUint32(bytes[:],randNum)
+  binary.BigEndian.PutUint32(bytes[:],randNum)
+  log.Println("HEX",hex.EncodeToString(bytes[:]))
   j.ID = hex.EncodeToString(bytes[:])
   return j.ID
 }
@@ -75,19 +76,26 @@ func (j *Job) Start(){
   fileRead := bufio.NewReader(j.fileHandle)
 
   for _ = range ticker.C {
-    log.Println("tick",*j.rate)
-    for i := 0; i < *j.rate; i++ {
-      lineBuffer, _, err := fileRead.ReadLine()
-      if err != nil {
-        log.Println(err)
-        j.openFile()
-        fileRead = bufio.NewReader(j.fileHandle)
-        lineBuffer, _, err = fileRead.ReadLine()
-      }
-      msg := message.NewMessage(j.sourceHost, j.syslogFacility, j.syslogSeverity)
-      msg.AddToMessage(string(lineBuffer))
-      log.Println(msg)
-      msg.Send(j.conn)
+    log.Println("Tick JobID",j.ID)
+    select {
+      case newJobMsg := <-j.CtrlChannel:
+        if newJobMsg.Action == jobmsg.Stop {
+          return
+        }
+      default:
+        for i := 0; i < *j.rate; i++ {
+          lineBuffer, _, err := fileRead.ReadLine()
+          if err != nil {
+            log.Println(err)
+            j.openFile()
+            fileRead = bufio.NewReader(j.fileHandle)
+            lineBuffer, _, err = fileRead.ReadLine()
+          }
+          msg := message.NewMessage(j.sourceHost, j.syslogFacility, j.syslogSeverity)
+          msg.AddToMessage(string(lineBuffer))
+          log.Println(msg)
+          msg.Send(j.conn)
+        }
     }
     //Check for close requests
   }

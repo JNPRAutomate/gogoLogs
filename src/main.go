@@ -91,8 +91,8 @@ func main() {
 		}
 	} else if *enableWebUI == true {
 		//create channels
-		cc := make(chan jobmsg.JobMsg,0)
-		sc := make(chan stats.Stats,0)
+		cc := make(chan jobmsg.JobMsg,4096)
+		sc := make(chan stats.Stats,4096)
 		handy := handlers.NewHandler(cc,sc,8080,".")
 		handy.Start()
 	}
