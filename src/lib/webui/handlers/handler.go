@@ -3,6 +3,8 @@ package handlers
 import (
 	"log"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"net/http"
 	"lib/job/jobmgr"
 	"lib/job/jobmsg"
@@ -16,6 +18,7 @@ import (
 type Handler struct {
 	HttpPort int
 	LogDir string
+	logFiles []os.FileInfo
 	jobChan chan job.Job
 	ctrlChan chan jobmsg.JobMsg
 	statsChan chan stats.Stats
@@ -34,6 +37,22 @@ func NewHandler(cc chan jobmsg.JobMsg, sc chan stats.Stats, p int, ld string) Ha
 		LogDir:ld,
 	}
 	return h
+}
+
+func (h *Handler) listFiles() {
+	log.Println("LIST")
+	files, err := ioutil.ReadDir(h.LogDir)
+	if err != nil {
+		log.Println(err)
+	}
+	for item := range files {
+		if files[item].IsDir() {
+			//Skip
+		} else {
+			h.logFiles = append(h.logFiles,files[item])
+		}
+	}
+	log.Println(h.logFiles)
 }
 
 func (h *Handler) SetLogDir() {
@@ -142,6 +161,7 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 
 /*Start starts the webUI handler*/
 func (h *Handler) Start() {
+	h.listFiles()
 	//setup handlers and listeners
 	reqRouter := mux.NewRouter()
 	reqRouter.HandleFunc("/job/start",h.startJob)

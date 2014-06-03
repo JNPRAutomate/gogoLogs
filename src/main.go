@@ -24,15 +24,15 @@ var sourceHost = flag.String("s", "127.0.0.1", "Specify source hostname/IP for s
 var destinationPort = flag.String("p", "514", "Sepecify port (default: 514)")
 var protocol = flag.String("P", "UDP", "Specify protocol to send data over (default: UDP)")
 var fileName = flag.String("f", "", "Specify file to read from (default: None)")
-var dirName = flag.String("D", "", "Specify the directory to serve logs from (default: None, Requires -w flag as well)")
 var rate = flag.Int("r", 5, "Specify rate (default: 5/s)")
 var syslogFacility = flag.Int("F", 0, "Specify syslog priority value (default:0)")
 var syslogSeverity = flag.Int("S", 0, "Specify syslog priority value (default:0)")
 var nonStop = flag.Bool("C", false, "Specify if the file should be continously read from (default: false)")
 
 //WebUI
-var enableWebUI = flag.Bool("w", false, "Enable WebIU for log sender (default: false) (To be added)")
-
+var enableWebUI = flag.Bool("w", false, "Enable WebIU for log sender (default: false)")
+var webUIPort = flag.Int("wP",8080, "Specify the port to listen on (default: 8080) (Used with -w)")
+var dirName = flag.String("wD", "", "Specify the directory to serve logs from (default: None, used with -w)")
 //create channels to handle listening to messages
 
 /*handleMessages a go routine to handle read files */
@@ -91,9 +91,9 @@ func main() {
 		}
 	} else if *enableWebUI == true {
 		//create channels
-		cc := make(chan jobmsg.JobMsg,4096)
-		sc := make(chan stats.Stats,4096)
-		handy := handlers.NewHandler(cc,sc,8080,".")
+		cc := make(chan jobmsg.JobMsg,msgBufSize)
+		sc := make(chan stats.Stats,msgBufSize)
+		handy := handlers.NewHandler(cc,sc,*webUIPort,*dirName)
 		handy.Start()
 	}
 }
