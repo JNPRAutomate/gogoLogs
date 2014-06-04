@@ -3,7 +3,6 @@ package handlers
 import (
 	"log"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"net/http"
 	"lib/job/jobmgr"
@@ -11,14 +10,21 @@ import (
 	"lib/job"
 	"strconv"
 	"lib/stats"
+	"html/template"
 	"github.com/gorilla/mux"
+	"path/filepath"
 )
+
+type File struct {
+	Info os.FileInfo
+	Path string
+}
 
 /*Handler - Creates and managers WebUI */
 type Handler struct {
 	HttpPort int
 	LogDir string
-	logFiles []os.FileInfo
+	logFiles []File
 	jobChan chan job.Job
 	ctrlChan chan jobmsg.JobMsg
 	statsChan chan stats.Stats
@@ -40,19 +46,13 @@ func NewHandler(cc chan jobmsg.JobMsg, sc chan stats.Stats, p int, ld string) Ha
 }
 
 func (h *Handler) listFiles() {
-	log.Println("LIST")
-	files, err := ioutil.ReadDir(h.LogDir)
-	if err != nil {
-		log.Println(err)
-	}
-	for item := range files {
-		if files[item].IsDir() {
-			//Skip
-		} else {
-			h.logFiles = append(h.logFiles,files[item])
-		}
-	}
-	log.Println(h.logFiles)
+	filepath.Walk(h.LogDir, func(path string, info os.FileInfo, err error) error {
+    if (!info.IsDir()) {
+			newFile := File{Info:info,Path:path}
+      h.logFiles = append(h.logFiles,newFile)
+    }
+    return nil
+  })
 }
 
 func (h *Handler) SetLogDir() {
@@ -157,6 +157,12 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 
 	//UI lines
 	// DEST HOST, LOG List combo box, syslog facility (combo), syslog priority (combo), src host, protocol, rate, stop and start toggle button
+	t := template.New("TEST TEMP")
+	t, _ = t.Parse(`<html><body><table><tr><th>File Name</th><th>Stats</th></tr>
+										{{ range . }}
+									   <tr><td style="text-align: left;">{{ .Info.Name }} <button type="button">Start/Stop</button> Rate: <input type="text" name="rate"></td><td>Sent: 1234 Rate: 433/s</td></tr>
+										{{ end}}</body></html>`)
+	t.Execute(w,h.logFiles)
 }
 
 /*Start starts the webUI handler*/
