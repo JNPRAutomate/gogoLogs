@@ -8,6 +8,7 @@ import (
   "time"
   "bufio"
   "log"
+  "strconv"
   "lib/message"
   "lib/job/jobmsg"
   "encoding/binary"
@@ -53,8 +54,12 @@ func (j *Job) GenID () string {
   return j.ID
 }
 
+func (j *Job) SetID(id int) {
+  j.ID = strconv.Itoa(id)
+}
+
 func (j *Job) openFile() error {
-  file, err := os.Open("/home/rcameron/code/gogoLogs/src/" + *j.fileName)
+  file, err := os.Open(*j.fileName)
   if err != nil {
     //handle file error
     //report back that the file cant be opened and why

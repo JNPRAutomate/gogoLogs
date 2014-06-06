@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Log Control</title>
+    <meta charset="UTF-8">
+  </head>
+  <body>
+    <table>
+      <tr><th>File Name</th><th>Control</th><th>Stats</th></tr>
+      {{ range . }}
+      <tr id="item{{ .ID }}"><td style="text-align: left;">{{ .Info.Name }} </td><td><button id="item{{ .ID }}" type="button" data-type="start" data-id="{{.ID}}">Start</button> <button id="item{{ .ID }}" type="button" data-type="stop" data-id="{{.ID}}">Stop</button> <label for="rate{{.ID}}">Rate</label> <input type="text" name="rate{{ .ID }}" > <label for="syslogFacility{{.ID}}">Syslog Facility</label> <input type="text" name="syslogFacility{{.ID}}">  <label for="syslogPriority{{.ID}}">Syslog Priority</label> <input type="text" name="syslogPriority{{.ID}}"> <label for="destHost{{.ID}}">Dest IP</label> <input type="text" name="destHost{{.ID}}"> <label for="sourceHost{{.ID}}">Source Host Name</label> <input type="text" name="sourceHost{{.ID}}"> </td><td>Sent: 1234 Rate: 433/s</td></tr>
+      {{ end}}
+      <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+      <script type="application/javascript">
+        window.onload = function() {
+          $( "button" ).click(function() {
+            console.log($(this).data("type"));
+            if ($(this).data("type") === "start") {
+              $.ajax({
+                type: "POST",
+                url: "job/start",
+                data: {rate:1 , syslogFacility:1 , syslogPriority:1 , destHost: "10.0.1.100", logFileID: $(this).data("id"), protocol: "udp", sourceHost: "appple"},
+                success: function(data,textStatus,jqxhr){},
+                dataType: "json"
+              });
+            } else if ($(this).data("type") === "stop") {
+              $.ajax({
+                type: "POST",
+                url: "job/stop/" + $(this).data("id"),
+                data: {rate:1 , syslogFacility:1 , syslogPriority:1 , destHost: "10.0.1.100", logFileID: $(this).data("id"), protocol: "udp", sourceHost: "appple"},
+                success: function(data,textStatus,jqxhr){},
+                dataType: "json"
+              });
+            }
+            return false;
+          });
+        };
+      </script>
+  </body>
+</html>
