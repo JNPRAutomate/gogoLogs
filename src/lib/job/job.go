@@ -11,6 +11,7 @@ import (
   "strconv"
   "lib/message"
   "lib/job/jobmsg"
+  "lib/stats/statsmsg"
   "encoding/binary"
   "encoding/hex"
 )
@@ -23,11 +24,12 @@ type Job struct {
   sourceHost *string
   fileName *string
   fileHandle *os.File
+  StatsChannel chan statsmsg.StatsMsg
   CtrlChannel chan jobmsg.JobMsg
   conn net.Conn
 }
 
-func NewJob(dip *string, dport *string,r *int, sf *int, ss *int, sh *string, file *string, cc chan jobmsg.JobMsg) (Job,error) {
+func NewJob(dip *string, dport *string,r *int, sf *int, ss *int, sh *string, file *string, cc chan jobmsg.JobMsg, statchan chan statsmsg.StatsMsg) (Job,error) {
   destAddr, err := net.ResolveUDPAddr("udp", *dip+":"+*dport)
   con, err := net.DialUDP("udp", nil, destAddr)
   j := Job{
@@ -37,6 +39,7 @@ func NewJob(dip *string, dport *string,r *int, sf *int, ss *int, sh *string, fil
     syslogSeverity: ss,
     fileName: file,
     CtrlChannel: cc,
+    StatsChannel: statchan,
     conn:con,
   }
   err = j.openFile()
@@ -49,7 +52,6 @@ func (j *Job) GenID () string {
   randNum := rand.Uint32() + 1
   bytes := [4]byte{}
   binary.BigEndian.PutUint32(bytes[:],randNum)
-  log.Println("HEX",hex.EncodeToString(bytes[:]))
   j.ID = hex.EncodeToString(bytes[:])
   return j.ID
 }
@@ -79,14 +81,21 @@ func (j *Job) Start(){
   //set it as a go routine with a channel to be controlled
   ticker := time.NewTicker(time.Second * 1)
   fileRead := bufio.NewReader(j.fileHandle)
+  var sendRate uint
+  var totalSent uint
+  sendRate = 0
+  totalSent = 0
 
   for _ = range ticker.C {
     log.Println("Tick JobID",j.ID)
     select {
+      //Check for close requests
       case newJobMsg := <-j.CtrlChannel:
         if newJobMsg.Action == jobmsg.Stop {
+          //exiting
           return
         }
+      //continue job
       default:
         for i := 0; i < *j.rate; i++ {
           lineBuffer, _, err := fileRead.ReadLine()
@@ -100,8 +109,14 @@ func (j *Job) Start(){
           msg.AddToMessage(string(lineBuffer))
           log.Println(msg)
           msg.Send(j.conn)
+          totalSent = totalSent + 1
+          sendRate = sendRate + 1
         }
+        //send stats here
+        // sentRate, totalSent, jobID
+        //reset sent rate
+        j.StatsChannel <- statsmsg.StatsMsg{TotalSent: totalSent, SendRate: sendRate}
+        sendRate = 0
     }
-    //Check for close requests
   }
 }

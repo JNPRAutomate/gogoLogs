@@ -2,8 +2,8 @@ package jobmgr
 
 import (
   "lib/job/jobmsg"
+  "lib/stats/statsmsg"
   "lib/job"
-  "log"
 )
 
 type JobMgr struct {
@@ -15,6 +15,7 @@ type JobMgr struct {
 type JobHook struct {
   ID string
   CtrlChannel chan jobmsg.JobMsg
+  StatsChannel chan statsmsg.StatsMsg
 }
 
 func NewJobMgr( mc chan job.Job, cc chan jobmsg.JobMsg) JobMgr {
@@ -30,16 +31,18 @@ func(jm *JobMgr) Run() {
         newJobHook := JobHook{
           ID: newJob.ID,
           CtrlChannel:newJob.CtrlChannel,
+          StatsChannel: newJob.StatsChannel,
         }
         jm.JobHooks[newJob.ID]  = newJobHook
         go newJob.Start()
       case newJobMsg := <- jm.CtrlChannel:
-        log.Println("IIIIIIIIIIIIIIIIII",newJobMsg.ID)
-        log.Println("HHHHHHHHHHHHHh",jm.JobHooks[newJobMsg.ID])
-        jm.JobHooks[newJobMsg.ID].CtrlChannel <- jobmsg.JobMsg{Action:jobmsg.Stop}
+        if (newJobMsg.Action == jobmsg.Stop) {
+          jm.JobHooks[newJobMsg.ID].CtrlChannel <- jobmsg.JobMsg{Action:jobmsg.Stop}
+        }
         //remove job hook from slice
         delete(jm.JobHooks,newJobMsg.ID)
       default:
+        //collect all stats here on every tick
         continue
     }
   }

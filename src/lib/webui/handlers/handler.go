@@ -8,6 +8,7 @@ import (
 	"lib/job/jobmgr"
 	"lib/job/jobmsg"
 	"lib/job"
+	"lib/stats/statsmsg"
 	"strconv"
 	"lib/stats"
 	"html/template"
@@ -114,7 +115,7 @@ func (h *Handler) startJob(w http.ResponseWriter, req *http.Request){
 	}
 	if logFileID = req.FormValue("logFileID"); logFileID != "" {
 		if jobLogFileID , err = strconv.Atoi(logFileID); err != nil {
-			log.Println("EEEEEEEEEEEEEee",err)
+
 		}
 	}
 	if protocol = req.FormValue("protocol"); protocol != "" {
@@ -128,10 +129,9 @@ func (h *Handler) startJob(w http.ResponseWriter, req *http.Request){
 	var newJob job.Job
 	//find the logfile name by ID
 	logFileName := h.logFileNameByID(jobLogFileID)
-	if newJob,err = job.NewJob(&destHost,&port,&jobRate,&jobSyslogFacility,&jobSyslogSeverity,&sourceHost,&logFileName,make(chan jobmsg.JobMsg,4096)); err != nil {
+	if newJob,err = job.NewJob(&destHost,&port,&jobRate,&jobSyslogFacility,&jobSyslogSeverity,&sourceHost,&logFileName,make(chan jobmsg.JobMsg,4096),make(chan statsmsg.StatsMsg,4096)); err != nil {
 		log.Println(err,logFileName)
 	} else {
-		log.Println("SEEEEEEEEEEEEEEEEEEEEEEEEET",jobLogFileID)
 		newJob.SetID(jobLogFileID)
 		h.jobMgr.MainChannel <- newJob
 	}
@@ -146,7 +146,6 @@ func (h *Handler) stopJob(w http.ResponseWriter, req *http.Request){
 	ID := vars["ID"]
 	//send message to stop job
 	newMsg := jobmsg.JobMsg{ID:ID,Action:jobmsg.Stop}
-	fmt.Println("MMMMMMMMMMMMMMMMMMM",newMsg)
 	h.ctrlChan <- newMsg
 	fmt.Fprintf(w, "Hi there, I love %s!", ID)
 }
@@ -175,23 +174,48 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 	<head>
 		<title>Log Control</title>
 		<meta charset="UTF-8">
+		<style>
+			.tdalign {
+				text-align: left;
+				width: 50px;
+			}
+		  input {
+				width: 75px
+			}
+			table {
+				padding: 20px;
+			}
+			td {
+				left-padding: 10px;
+				right-padding: 10px;
+			}
+			.logRow {
+				background-color: grey;
+			}
+			.title {
+				text-align: center;
+			}
+		</style>
 	</head>
 	<body>
+		<h1 class="title">gogoLogs - A log sending tool</h1>
 		<table>
-			<tr><th>File Name</th><th>Control</th><th>Stats</th></tr>
+			<tr><th>File Name</th><th>Settings</th><th>Stats</th></tr>
 			{{ range . }}
-			<tr id="item{{ .ID }}"><td style="text-align: left;">{{ .Info.Name }} </td><td><button id="item{{ .ID }}" type="button" data-type="start" data-id="{{.ID}}">Start</button> <button id="item{{ .ID }}" type="button" data-type="stop" data-id="{{.ID}}">Stop</button> <label for="rate{{.ID}}">Rate</label> <input type="text" name="rate{{ .ID }}" > <label for="syslogFacility{{.ID}}">Syslog Facility</label> <input type="text" name="syslogFacility{{.ID}}">  <label for="syslogPriority{{.ID}}">Syslog Priority</label> <input type="text" name="syslogPriority{{.ID}}"> <label for="destHost{{.ID}}">Dest IP</label> <input type="text" name="destHost{{.ID}}"> <label for="sourceHost{{.ID}}">Source Host Name</label> <input type="text" name="sourceHost{{.ID}}"> </td><td>Sent: 1234 Rate: 433/s</td></tr>
-			{{ end}}
-			<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+				<tr class="logRow" id="item{{ .ID }}"><td class="tdalign">{{ .Info.Name }} </td><td><label for="rate{{.ID}}">Rate</label> <input type="text" id="rate{{ .ID }}" > <label for="syslogFacility{{.ID}}">Syslog Facility</label> <input type="text" id="syslogFacility{{.ID}}">  <label for="syslogPriority{{.ID}}">Syslog Priority</label> <input type="text" id="syslogPriority{{.ID}}"> <label for="destHost{{.ID}}">Dest IP</label> <input type="text" id="destHost{{.ID}}"> <label for="sourceHost{{.ID}}">Source Host Name</label> <input type="text" id="sourceHost{{.ID}}"> <button id="item{{ .ID }}" type="button" data-type="start" data-id="{{.ID}}">Start</button> <button id="item{{ .ID }}" type="button" data-type="stop" data-id="{{.ID}}">Stop</button> </td><td>Sent: 1234 Rate: 433/s</td></tr>
+			{{ end }}
+
+			<script src="//localhost/jquery.js"></script>
 			<script type="application/javascript">
 				window.onload = function() {
 					$( "button" ).click(function() {
 						console.log($(this).data("type"));
+						var itemid = $(this).data("id");
 						if ($(this).data("type") === "start") {
 							$.ajax({
 								type: "POST",
 								url: "job/start",
-								data: {rate:1 , syslogFacility:1 , syslogPriority:1 , destHost: "10.0.1.100", logFileID: $(this).data("id"), protocol: "udp", sourceHost: "appple"},
+								data: {rate:$("#rate"+itemid).val() , syslogFacility: $("#syslogFacility"+itemid).val() , syslogPriority: $("#syslogPriority"+itemid).val(), destHost: $("#destHost"+itemid).val(), logFileID: $(this).data("id"), protocol: "udp", sourceHost: $("#sourceHost"+itemid).val()},
 								success: function(data,textStatus,jqxhr){},
 								dataType: "json"
 							});
@@ -199,7 +223,6 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 							$.ajax({
 								type: "POST",
 								url: "job/stop/" + $(this).data("id"),
-								data: {rate:1 , syslogFacility:1 , syslogPriority:1 , destHost: "10.0.1.100", logFileID: $(this).data("id"), protocol: "udp", sourceHost: "appple"},
 								success: function(data,textStatus,jqxhr){},
 								dataType: "json"
 							});
@@ -210,6 +233,7 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 			</script>
 	</body>
 </html>
+
 
 `
 	//UI lines
