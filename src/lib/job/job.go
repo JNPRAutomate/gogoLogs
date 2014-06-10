@@ -62,6 +62,7 @@ func (j *Job) SetID(id int) {
 
 func (j *Job) openFile() error {
   file, err := os.Open(*j.fileName)
+  defer file.Close()
   if err != nil {
     //handle file error
     //report back that the file cant be opened and why

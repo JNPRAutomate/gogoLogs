@@ -160,6 +160,9 @@ func (h *Handler) statusJob(w http.ResponseWriter, req *http.Request){
 func (h *Handler) statsJob(w http.ResponseWriter, req *http.Request){
 	//check for stats on job
 	//return stats struct
+	vars := mux.Vars(req)
+	ID := vars["ID"]
+	fmt.Fprintf(w, "{\"count\":%d,\"rate\":%d}", h.jobMgr.Stats[ID].Count,h.jobMgr.Stats[ID].Rate)
 }
 
 /*manage Main UI access */
@@ -190,7 +193,7 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 				right-padding: 10px;
 			}
 			.logRow {
-				background-color: grey;
+				background-color: #cccccc;
 			}
 			.title {
 				text-align: center;
@@ -202,7 +205,19 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 		<table>
 			<tr><th>File Name</th><th>Settings</th><th>Stats</th></tr>
 			{{ range . }}
-				<tr class="logRow" id="item{{ .ID }}"><td class="tdalign">{{ .Info.Name }} </td><td><label for="rate{{.ID}}">Rate</label> <input type="text" id="rate{{ .ID }}" > <label for="syslogFacility{{.ID}}">Syslog Facility</label> <input type="text" id="syslogFacility{{.ID}}">  <label for="syslogPriority{{.ID}}">Syslog Priority</label> <input type="text" id="syslogPriority{{.ID}}"> <label for="destHost{{.ID}}">Dest IP</label> <input type="text" id="destHost{{.ID}}"> <label for="sourceHost{{.ID}}">Source Host Name</label> <input type="text" id="sourceHost{{.ID}}"> <button id="item{{ .ID }}" type="button" data-type="start" data-id="{{.ID}}">Start</button> <button id="item{{ .ID }}" type="button" data-type="stop" data-id="{{.ID}}">Stop</button> </td><td>Sent: 1234 Rate: 433/s</td></tr>
+				<tr class="logRow" id="item{{ .ID }}">
+					<td class="tdalign">{{ .Info.Name }} </td>
+					<td>
+						<label for="rate{{.ID}}">Rate</label> <input type="text" id="rate{{ .ID }}" >
+						<label for="syslogFacility{{.ID}}">Syslog Facility</label> <input type="text" id="syslogFacility{{.ID}}">
+					  <label for="syslogPriority{{.ID}}">Syslog Priority</label> <input type="text" id="syslogPriority{{.ID}}">
+						<label for="destHost{{.ID}}">Dest IP</label> <input type="text" id="destHost{{.ID}}">
+						<label for="sourceHost{{.ID}}">Source Host Name</label> <input type="text" id="sourceHost{{.ID}}">
+						<button id="item{{ .ID }}" type="button" data-type="start" data-id="{{.ID}}">Start</button>
+						<button id="item{{ .ID }}" type="button" data-type="stop" data-id="{{.ID}}">Stop</button>
+					</td>
+					<td id="stats{{.ID}}"></td>
+				</tr>
 			{{ end }}
 
 			<script src="//localhost/jquery.js"></script>
@@ -215,7 +230,15 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 							$.ajax({
 								type: "POST",
 								url: "job/start",
-								data: {rate:$("#rate"+itemid).val() , syslogFacility: $("#syslogFacility"+itemid).val() , syslogPriority: $("#syslogPriority"+itemid).val(), destHost: $("#destHost"+itemid).val(), logFileID: $(this).data("id"), protocol: "udp", sourceHost: $("#sourceHost"+itemid).val()},
+								data: {
+									rate:$("#rate"+itemid).val() ,
+									syslogFacility: $("#syslogFacility"+itemid).val(),
+									syslogPriority: $("#syslogPriority"+itemid).val(),
+									destHost: $("#destHost"+itemid).val(),
+									logFileID: $(this).data("id"),
+									protocol: "udp",
+									sourceHost: $("#sourceHost"+itemid).val()
+								},
 								success: function(data,textStatus,jqxhr){},
 								dataType: "json"
 							});
@@ -229,18 +252,26 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 						}
 						return false;
 					});
+					//Loop and get current stats
 				};
 			</script>
 	</body>
 </html>
-
-
 `
 	//UI lines
 	// DEST HOST, LOG List combo box, syslog facility (combo), syslog priority (combo), src host, protocol, rate, stop and start toggle button
 	t := template.New("TEST TEMP")
 	t, _ = t.Parse(HTML_DATA)
 	t.Execute(w,h.logFiles)
+}
+
+func (h *Handler) jobList(w http.ResponseWriter, req *http.Request) {
+	//grab the current list of job IDs as an array
+  jobList := make([]string,0)
+	for key,_ := range h.jobMgr.JobHooks {
+		jobList = append(jobList,key)
+	}
+	fmt.Fprintf(w, "{\"jobList\":%s}", jobList)
 }
 
 /*Start starts the webUI handler*/
@@ -252,6 +283,7 @@ func (h *Handler) Start() {
 	reqRouter.HandleFunc("/job/stop/{ID}",h.stopJob)
 	reqRouter.HandleFunc("/job/status/{ID}",h.statusJob)
 	reqRouter.HandleFunc("/job/stats/{ID}",h.statsJob)
+	reqRouter.HandleFunc("/job/list",h.jobList)
 	reqRouter.HandleFunc("/",h.manage)
 	http.Handle("/",reqRouter)
 	go h.jobMgr.Run()
