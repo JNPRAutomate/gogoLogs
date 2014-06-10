@@ -44,7 +44,9 @@ func(jm *JobMgr) Run() {
         go newJob.Start()
       case newJobMsg := <- jm.CtrlChannel:
         if (newJobMsg.Action == jobmsg.Stop) {
-          jm.JobHooks[newJobMsg.ID].CtrlChannel <- jobmsg.JobMsg{Action:jobmsg.Stop}
+          if jm.JobHooks[newJobMsg.ID].ID != "" {
+            jm.JobHooks[newJobMsg.ID].CtrlChannel <- jobmsg.JobMsg{Action:jobmsg.Stop}
+          }
         }
         //remove job hook from slice
         delete(jm.JobHooks,newJobMsg.ID)
