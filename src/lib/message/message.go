@@ -37,6 +37,7 @@ func (m *Message) calcSyslogPriority(f *int, s *int ) {
 
 func (m *Message) Send(con net.Conn) {
   finalMessage := strings.Join(m.message," ")
+  //If not networking available this can crash
   con.Write([]byte(finalMessage))
   //log.Println(finalMessage)
 }

@@ -29,7 +29,7 @@ type Job struct {
   conn net.Conn
 }
 
-func NewJob(dip *string, dport *string,r *int, sf *int, ss *int, sh *string, file *string, cc chan jobmsg.JobMsg, statchan chan statsmsg.StatsMsg) (Job,error) {
+func NewJob(dip *string, dport *string,r *int, sf *int, ss *int, sh *string, file *string, cc chan jobmsg.JobMsg) (Job,error) {
   destAddr, err := net.ResolveUDPAddr("udp", *dip+":"+*dport)
   con, err := net.DialUDP("udp", nil, destAddr)
   j := Job{
@@ -39,7 +39,6 @@ func NewJob(dip *string, dport *string,r *int, sf *int, ss *int, sh *string, fil
     syslogSeverity: ss,
     fileName: file,
     CtrlChannel: cc,
-    StatsChannel: statchan,
     conn:con,
   }
   err = j.openFile()
@@ -62,7 +61,6 @@ func (j *Job) SetID(id int) {
 
 func (j *Job) openFile() error {
   file, err := os.Open(*j.fileName)
-  defer file.Close()
   if err != nil {
     //handle file error
     //report back that the file cant be opened and why
@@ -101,6 +99,7 @@ func (j *Job) Start(){
         for i := 0; i < *j.rate; i++ {
           lineBuffer, _, err := fileRead.ReadLine()
           if err != nil {
+            j.fileHandle.Close()
             log.Println(err)
             j.openFile()
             fileRead = bufio.NewReader(j.fileHandle)
@@ -116,7 +115,7 @@ func (j *Job) Start(){
         //send stats here
         // sentRate, totalSent, jobID
         //reset sent rate
-        j.StatsChannel <- statsmsg.StatsMsg{TotalSent: totalSent, SendRate: sendRate}
+        j.StatsChannel <- statsmsg.StatsMsg{ID:j.ID,TotalSent: totalSent, SendRate: sendRate}
         sendRate = 0
     }
   }

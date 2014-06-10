@@ -11,6 +11,7 @@ import (
 type JobMgr struct {
   MainChannel chan job.Job
   CtrlChannel chan jobmsg.JobMsg
+  StatsChannel chan statsmsg.StatsMsg
   JobHooks map[string] JobHook
   Stats map[string] stats.Stats
 }
@@ -18,13 +19,13 @@ type JobMgr struct {
 type JobHook struct {
   ID string
   CtrlChannel chan jobmsg.JobMsg
-  StatsChannel chan statsmsg.StatsMsg
 }
 
 func NewJobMgr( mc chan job.Job, cc chan jobmsg.JobMsg) JobMgr {
   jm := JobMgr{MainChannel: mc, CtrlChannel: cc}
   jm.JobHooks = make(map[string]JobHook)
   jm.Stats = make(map[string]stats.Stats)
+  jm.StatsChannel = make(chan statsmsg.StatsMsg,4096)
   return jm
 }
 
@@ -35,11 +36,11 @@ func(jm *JobMgr) Run() {
         newJobHook := JobHook{
           ID: newJob.ID,
           CtrlChannel:newJob.CtrlChannel,
-          StatsChannel: newJob.StatsChannel,
         }
         jm.JobHooks[newJob.ID] = newJobHook
         //create new stats history
         jm.Stats[newJob.ID] = stats.Stats{Count:0,Rate:0}
+        newJob.StatsChannel = jm.StatsChannel
         go newJob.Start()
       case newJobMsg := <- jm.CtrlChannel:
         if (newJobMsg.Action == jobmsg.Stop) {
@@ -47,19 +48,10 @@ func(jm *JobMgr) Run() {
         }
         //remove job hook from slice
         delete(jm.JobHooks,newJobMsg.ID)
-      default:
-        for key, _ := range jm.JobHooks {
-          select {
-            case statsMsg := <- jm.JobHooks[key].StatsChannel:
-              delete(jm.Stats,key)
-              jm.Stats[key] = stats.Stats{Count:statsMsg.TotalSent,Rate:statsMsg.SendRate}
-              log.Println(jm.Stats[key])
-             default:
-              continue
-          }
-        }
-        //collect all stats here on every tick
-        continue
+      case newStatsMsg := <- jm.StatsChannel:
+        delete(jm.Stats,newStatsMsg.ID)
+        jm.Stats[newStatsMsg.ID] = stats.Stats{Count:newStatsMsg.TotalSent,Rate:newStatsMsg.SendRate}
+        log.Println(jm.Stats[newStatsMsg.ID])
     }
   }
 }

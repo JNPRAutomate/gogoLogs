@@ -8,12 +8,12 @@ import (
 	"lib/job/jobmgr"
 	"lib/job/jobmsg"
 	"lib/job"
-	"lib/stats/statsmsg"
 	"strconv"
 	"lib/stats"
 	"html/template"
 	"github.com/gorilla/mux"
 	"path/filepath"
+	"encoding/json"
 )
 
 type File struct {
@@ -59,7 +59,7 @@ func (h *Handler) listFiles() {
 
 func (h *Handler) logFileNameByID(id int) string {
 	var name string
-	name = h.logFiles[0].Path;
+	name = h.logFiles[id].Path;
 	return name
 }
 
@@ -129,7 +129,7 @@ func (h *Handler) startJob(w http.ResponseWriter, req *http.Request){
 	var newJob job.Job
 	//find the logfile name by ID
 	logFileName := h.logFileNameByID(jobLogFileID)
-	if newJob,err = job.NewJob(&destHost,&port,&jobRate,&jobSyslogFacility,&jobSyslogSeverity,&sourceHost,&logFileName,make(chan jobmsg.JobMsg,4096),make(chan statsmsg.StatsMsg,4096)); err != nil {
+	if newJob,err = job.NewJob(&destHost,&port,&jobRate,&jobSyslogFacility,&jobSyslogSeverity,&sourceHost,&logFileName,make(chan jobmsg.JobMsg,4096)); err != nil {
 		log.Println(err,logFileName)
 	} else {
 		newJob.SetID(jobLogFileID)
@@ -271,7 +271,8 @@ func (h *Handler) jobList(w http.ResponseWriter, req *http.Request) {
 	for key,_ := range h.jobMgr.JobHooks {
 		jobList = append(jobList,key)
 	}
-	fmt.Fprintf(w, "{\"jobList\":%s}", jobList)
+	jsonData, _ := json.Marshal(jobList)
+	fmt.Fprintf(w, "{\"jobList\":%s}", jsonData)
 }
 
 /*Start starts the webUI handler*/
