@@ -19,7 +19,7 @@
         right-padding: 10px;
       }
       .logRow {
-        background-color: grey;
+        background-color: #cccccc;
       }
       .title {
         text-align: center;
@@ -29,22 +29,63 @@
   <body>
     <h1 class="title">gogoLogs - A log sending tool</h1>
     <table>
+      <button id="refresh">REFRESH</button>
       <tr><th>File Name</th><th>Settings</th><th>Stats</th></tr>
       {{ range . }}
-        <tr class="logRow" id="item{{ .ID }}"><td class="tdalign">{{ .Info.Name }} </td><td><label for="rate{{.ID}}">Rate</label> <input type="text" id="rate{{ .ID }}" > <label for="syslogFacility{{.ID}}">Syslog Facility</label> <input type="text" id="syslogFacility{{.ID}}">  <label for="syslogPriority{{.ID}}">Syslog Priority</label> <input type="text" id="syslogPriority{{.ID}}"> <label for="destHost{{.ID}}">Dest IP</label> <input type="text" id="destHost{{.ID}}"> <label for="sourceHost{{.ID}}">Source Host Name</label> <input type="text" id="sourceHost{{.ID}}"> <button id="item{{ .ID }}" type="button" data-type="start" data-id="{{.ID}}">Start</button> <button id="item{{ .ID }}" type="button" data-type="stop" data-id="{{.ID}}">Stop</button> </td><td>Sent: 1234 Rate: 433/s</td></tr>
+        <tr class="logRow" id="item{{ .ID }}">
+          <td class="tdalign">{{ .Info.Name }} </td>
+          <td>
+            <label for="rate{{.ID}}">Rate</label> <input type="text" id="rate{{ .ID }}" >
+            <label for="syslogFacility{{.ID}}">Syslog Facility</label> <input type="text" id="syslogFacility{{.ID}}">
+            <label for="syslogPriority{{.ID}}">Syslog Priority</label> <input type="text" id="syslogPriority{{.ID}}">
+            <label for="destHost{{.ID}}">Dest IP</label> <input type="text" id="destHost{{.ID}}">
+            <label for="sourceHost{{.ID}}">Source Host Name</label> <input type="text" id="sourceHost{{.ID}}">
+            <button id="actionButton" type="button" data-type="start" data-id="{{.ID}}">Start</button>
+            <button id="actionButton" type="button" data-type="stop" data-id="{{.ID}}">Stop</button>
+          </td>
+          <td id="stats{{.ID}}">None</td>
+        </tr>
       {{ end }}
 
       <script src="//localhost/jquery.js"></script>
       <script type="application/javascript">
         window.onload = function() {
-          $( "button" ).click(function() {
-            console.log($(this).data("type"));
+          $("#refresh").click(function(){
+            console.log("REF")
+            $.ajax({
+              type: "GET",
+              url: "job/list",
+              dataType:"json",
+              success: function(data,textStatus,jqxhr) {
+                for (var i = 0; i < data.jobList; i++) {
+                  $.ajax({
+                    type:"GET",
+                    url:"job/stats/" + data.jobList[i],
+                    dataType: "json",
+                    success: function(data,textStatus,jqxhr) {
+                      console.log(data.jobList[i])
+                      $("#stats" + data.jobList[i]).append("<div>Count: " + data.Count + " Rate: " + data.Rate + " </div>");
+                    }
+                  })
+                }
+              }
+            });
+          });
+          $( "#actionButton" ).click(function() {
             var itemid = $(this).data("id");
             if ($(this).data("type") === "start") {
               $.ajax({
                 type: "POST",
                 url: "job/start",
-                data: {rate:$("#rate"+itemid).val() , syslogFacility: $("#syslogFacility"+itemid).val() , syslogPriority: $("#syslogPriority"+itemid).val(), destHost: $("#destHost"+itemid).val(), logFileID: $(this).data("id"), protocol: "udp", sourceHost: $("#sourceHost"+itemid).val()},
+                data: {
+                  rate:$("#rate"+itemid).val() ,
+                  syslogFacility: $("#syslogFacility"+itemid).val(),
+                  syslogPriority: $("#syslogPriority"+itemid).val(),
+                  destHost: $("#destHost"+itemid).val(),
+                  logFileID: $(this).data("id"),
+                  protocol: "udp",
+                  sourceHost: $("#sourceHost"+itemid).val()
+                },
                 success: function(data,textStatus,jqxhr){},
                 dataType: "json"
               });
@@ -58,6 +99,7 @@
             }
             return false;
           });
+          //Loop and get current stats
         };
       </script>
   </body>

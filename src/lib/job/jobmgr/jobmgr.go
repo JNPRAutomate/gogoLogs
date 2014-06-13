@@ -57,8 +57,3 @@ func(jm *JobMgr) Run() {
     }
   }
 }
-
-func(jm *JobMgr) removeJobHook(id *string) error {
-  //remove job from map
-  return nil
-}

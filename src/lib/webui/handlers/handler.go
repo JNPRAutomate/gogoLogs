@@ -144,10 +144,11 @@ func (h *Handler) stopJob(w http.ResponseWriter, req *http.Request){
 	//return if stop was success or failure
 	vars := mux.Vars(req)
 	ID := vars["ID"]
+	IDint, _ := strconv.Atoi(ID)
 	//send message to stop job
 	newMsg := jobmsg.JobMsg{ID:ID,Action:jobmsg.Stop}
 	h.ctrlChan <- newMsg
-	fmt.Fprintf(w, "Hi there, I love %s!", ID)
+	fmt.Fprintf(w, "{\"id\":%d}", IDint)
 }
 
 /*statusJob checks job status*/
@@ -162,7 +163,8 @@ func (h *Handler) statsJob(w http.ResponseWriter, req *http.Request){
 	//return stats struct
 	vars := mux.Vars(req)
 	ID := vars["ID"]
-	fmt.Fprintf(w, "{\"count\":%d,\"rate\":%d}", h.jobMgr.Stats[ID].Count,h.jobMgr.Stats[ID].Rate)
+	IDint, _ := strconv.Atoi(ID)
+	fmt.Fprintf(w, "{\"id\":%d,\"count\":%d,\"rate\":%d}", IDint,h.jobMgr.Stats[ID].Count,h.jobMgr.Stats[ID].Rate)
 }
 
 /*manage Main UI access */
@@ -182,7 +184,7 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 				text-align: left;
 				width: 50px;
 			}
-		  input {
+			input {
 				width: 75px
 			}
 			table {
@@ -198,35 +200,66 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 			.title {
 				text-align: center;
 			}
+			.red {
+				background-color: red;
+			}
+			.green {
+				background-color: green;
+			}
 		</style>
 	</head>
 	<body>
 		<h1 class="title">gogoLogs - A log sending tool</h1>
 		<table>
-			<tr><th>File Name</th><th>Settings</th><th>Stats</th></tr>
+			<tr><th>File Name</th><th>Status</th><th>Settings</th><th>Stats</th></tr>
 			{{ range . }}
 				<tr class="logRow" id="item{{ .ID }}">
 					<td class="tdalign">{{ .Info.Name }} </td>
+					<td id="status{{ .ID }}" class="red"></td>
 					<td>
 						<label for="rate{{.ID}}">Rate</label> <input type="text" id="rate{{ .ID }}" >
 						<label for="syslogFacility{{.ID}}">Syslog Facility</label> <input type="text" id="syslogFacility{{.ID}}">
-					  <label for="syslogPriority{{.ID}}">Syslog Priority</label> <input type="text" id="syslogPriority{{.ID}}">
+						<label for="syslogPriority{{.ID}}">Syslog Priority</label> <input type="text" id="syslogPriority{{.ID}}">
 						<label for="destHost{{.ID}}">Dest IP</label> <input type="text" id="destHost{{.ID}}">
 						<label for="sourceHost{{.ID}}">Source Host Name</label> <input type="text" id="sourceHost{{.ID}}">
-						<button id="item{{ .ID }}" type="button" data-type="start" data-id="{{.ID}}">Start</button>
-						<button id="item{{ .ID }}" type="button" data-type="stop" data-id="{{.ID}}">Stop</button>
+						<button id="item{{.ID}}" type="button" data-type="start" data-id="{{.ID}}">Start</button>
+						<button id="item{{.ID}}" type="button" data-type="stop" data-id="{{.ID}}">Stop</button>
 					</td>
-					<td id="stats{{.ID}}"></td>
+					<td id="stats{{.ID}}">None</td>
 				</tr>
 			{{ end }}
 
 			<script src="//localhost/jquery.js"></script>
 			<script type="application/javascript">
 				window.onload = function() {
-					$( "button" ).click(function() {
-						console.log($(this).data("type"));
+
+					var timeoutID = window.setInterval(function(){
+						$.ajax({
+							type: "GET",
+							url: "job/list",
+							dataType:"json",
+							success: function(data,textStatus,jqxhr) {
+								for (var i = 0; i < data.jobList.length; i++) {
+									$("#status" + data.jobList[i]).removeClass("red");
+									$("#status" + data.jobList[i]).addClass("green");
+									$.ajax({
+										type:"GET",
+										url:"job/stats/" + data.jobList[i],
+										dataType: "json",
+										success: function(data,textStatus,jqxhr) {
+											$("#stats" + data.id).empty().append("<div>Count: " + data.count + " Rate: " + data.rate + " </div>");
+										}
+									})
+								}
+							}
+						});
+					},3000);
+
+					$( "button[id*='item']" ).click(function() {
 						var itemid = $(this).data("id");
 						if ($(this).data("type") === "start") {
+							$("#status" + itemid).removeClass("red");
+							$("#status" + itemid).addClass("green");
 							$.ajax({
 								type: "POST",
 								url: "job/start",
@@ -243,10 +276,15 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 								dataType: "json"
 							});
 						} else if ($(this).data("type") === "stop") {
+							var itemid = $(this).data("id");
 							$.ajax({
 								type: "POST",
-								url: "job/stop/" + $(this).data("id"),
-								success: function(data,textStatus,jqxhr){},
+								url: "job/stop/" + itemid,
+								success: function(data,textStatus,jqxhr){
+									$("#status" + data.id).removeClass("green");
+									$("#status" + data.id).addClass("red");
+									$("#stats" + data.id).empty().append("<div>None</div>");
+								},
 								dataType: "json"
 							});
 						}
@@ -257,6 +295,8 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 			</script>
 	</body>
 </html>
+
+
 `
 	//UI lines
 	// DEST HOST, LOG List combo box, syslog facility (combo), syslog priority (combo), src host, protocol, rate, stop and start toggle button
