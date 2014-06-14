@@ -8,6 +8,7 @@ import (
 	"lib/job/jobmgr"
 	"lib/job/jobmsg"
 	"lib/job"
+	"lib/webui/jquery"
 	"strconv"
 	"lib/stats"
 	"html/template"
@@ -180,22 +181,32 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 		<title>Log Control</title>
 		<meta charset="UTF-8">
 		<style>
+			body {
+				font-family: Arial, Helvetica, sans-serif;
+				background-color: #E0EBFF;
+			}
 			.tdalign {
 				text-align: left;
 				width: 50px;
 			}
-			input {
-				width: 75px
-			}
 			table {
 				padding: 20px;
 			}
-			td {
-				left-padding: 10px;
-				right-padding: 10px;
+			tr {
+				padding: 10px;
+			}
+			th {
+				padding: 10px;
+			}
+			#logTable {
+				margin: 0 auto;
+				width: 75%;
+			}
+			.headRow {
+				background-color: #6C90B2;
 			}
 			.logRow {
-				background-color: #cccccc;
+				background-color: #9BCDFF;
 			}
 			.title {
 				text-align: center;
@@ -210,26 +221,88 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 	</head>
 	<body>
 		<h1 class="title">gogoLogs - A log sending tool</h1>
+		<div id="logTable">
 		<table>
-			<tr><th>File Name</th><th>Status</th><th>Settings</th><th>Stats</th></tr>
+			<thead>
+			<tr class="headRow"><th>File Name</th><th>Status</th><th>Rate</th><th>Syslog Facility</th><th>Syslog Priority</th><th>Destination Host</th><th>Source Host Name</th><th>Action</th><th>Stats</th></tr>
+		</thead>
+			<tbody>
 			{{ range . }}
 				<tr class="logRow" id="item{{ .ID }}">
 					<td class="tdalign">{{ .Info.Name }} </td>
 					<td id="status{{ .ID }}" class="red"></td>
+					<td align="center">
+						<select id="rate{{ .ID }}">
+							<option value="1">1</option>
+							<option value="5">5</option>
+							<option value="10">10</option>
+							<option value="25">25</option>
+							<option value="50">50</option>
+							<option value="75">75</option>
+							<option value="100">100</option>
+							<option value="250">250</option>
+							<option value="500">500</option>
+							<option value="750">750</option>
+							<option value="1000">1000</option>
+						</select>
+					</td>
+					<td align="center">
+						<select id="syslogFacility{{.ID}}">
+							<option value="0">kern</option>
+							<option value="1">user</option>
+							<option value="2">mail</option>
+							<option value="3">daemon</option>
+							<option value="4">auth</option>
+							<option value="5">syslog</option>
+							<option value="6">lpr</option>
+							<option value="7">news</option>
+							<option value="8">uucp</option>
+							<option value="9">clock</option>
+							<option value="10">authpriv</option>
+							<option value="11">ftp</option>
+							<option value="12">ntp</option>
+							<option value="13">log audit</option>
+							<option value="14">log alert</option>
+							<option value="15">cron</option>
+							<option value="16">local0</option>
+							<option value="17">local1</option>
+							<option value="18">local2</option>
+							<option value="19">local3</option>
+							<option value="20">local4</option>
+							<option value="21">local5</option>
+							<option value="22">local6</option>
+							<option value="23">local7</option>
+						</select>
+					</td>
+					<td align="center">
+						<select id="syslogPriority{{.ID}}">
+							<option value="0">Emergency</option>
+							<option value="1">Alert</option>
+							<option value="2">Critical</option>
+							<option value="3">daemon</option>
+							<option value="4">auth</option>
+							<option value="5">syslog</option>
+							<option value="6">lpr</option>
+							<option value="7">news</option>
+						</select>
+					</td>
+					<td align="center">
+						<input type="text" id="destHost{{.ID}}">
+					</td>
+					<td align="center">
+						<input type="text" id="sourceHost{{.ID}}">
+					</td>
 					<td>
-						<label for="rate{{.ID}}">Rate</label> <input type="text" id="rate{{ .ID }}" >
-						<label for="syslogFacility{{.ID}}">Syslog Facility</label> <input type="text" id="syslogFacility{{.ID}}">
-						<label for="syslogPriority{{.ID}}">Syslog Priority</label> <input type="text" id="syslogPriority{{.ID}}">
-						<label for="destHost{{.ID}}">Dest IP</label> <input type="text" id="destHost{{.ID}}">
-						<label for="sourceHost{{.ID}}">Source Host Name</label> <input type="text" id="sourceHost{{.ID}}">
 						<button id="item{{.ID}}" type="button" data-type="start" data-id="{{.ID}}">Start</button>
 						<button id="item{{.ID}}" type="button" data-type="stop" data-id="{{.ID}}">Stop</button>
 					</td>
-					<td id="stats{{.ID}}">None</td>
+					<td align="center" id="stats{{.ID}}">None</td>
 				</tr>
 			{{ end }}
-
-			<script src="//localhost/jquery.js"></script>
+		</tbody>
+			</table>
+		</div>
+			<script src="/js/jquery.js"></script>
 			<script type="application/javascript">
 				window.onload = function() {
 
@@ -290,12 +363,10 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 						}
 						return false;
 					});
-					//Loop and get current stats
 				};
 			</script>
 	</body>
 </html>
-
 
 `
 	//UI lines
@@ -303,6 +374,12 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 	t := template.New("TEST TEMP")
 	t, _ = t.Parse(HTML_DATA)
 	t.Execute(w,h.logFiles)
+}
+
+func (h *Handler) jquery(w http.ResponseWriter, req *http.Request) {
+	//serve the jquery lib from memory
+	w.Header().Set("Content-Type", "application/javascript")
+	fmt.Fprintf(w,"%s",jquery.JQUERY_LIB)
 }
 
 func (h *Handler) jobList(w http.ResponseWriter, req *http.Request) {
@@ -320,6 +397,7 @@ func (h *Handler) Start() {
 	h.listFiles()
 	//setup handlers and listeners
 	reqRouter := mux.NewRouter()
+	reqRouter.HandleFunc("/js/jquery.js",h.jquery)
 	reqRouter.HandleFunc("/job/start",h.startJob)
 	reqRouter.HandleFunc("/job/stop/{ID}",h.stopJob)
 	reqRouter.HandleFunc("/job/status/{ID}",h.statusJob)
