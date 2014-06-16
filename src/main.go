@@ -53,7 +53,7 @@ func main() {
 	/* Parse command line flags */
 	flag.Parse()
 
-	if *enableWebUI != true {
+	if *enableWebUI != true && *fileName != "" {
 		//stand alone mode
 		file, err := os.Open(*fileName)
 		if err != nil {
@@ -90,11 +90,13 @@ func main() {
 				}
 			}
 		}
-	} else if *enableWebUI == true {
+	} else if *enableWebUI == true && *dirName != "" {
 		//create channels
 		cc := make(chan jobmsg.JobMsg,msgBufSize)
 		sc := make(chan stats.Stats,msgBufSize)
 		handy := handlers.NewHandler(cc,sc,*webUIPort,*dirName)
 		handy.Start()
+	} else {
+		flag.PrintDefaults()
 	}
 }
