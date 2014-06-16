@@ -81,6 +81,8 @@ func (h *Handler) startJob(w http.ResponseWriter, req *http.Request){
 	//int values
 	var rate string
 	var jobRate int
+	var maxCount string
+	var jobMaxCount uint
 
 	var syslogFacility string
 	var jobSyslogFacility int
@@ -127,16 +129,26 @@ func (h *Handler) startJob(w http.ResponseWriter, req *http.Request){
 
 		}
 	}
+
+	if maxCount = req.FormValue("maxCount"); maxCount != "" {
+		var uint64MaxCount uint64
+		if uint64MaxCount, err = strconv.ParseUint(maxCount,10,0); err != nil {
+
+		}
+		jobMaxCount = uint(uint64MaxCount)
+	}
+
 	var newJob job.Job
 	//find the logfile name by ID
 	logFileName := h.logFileNameByID(jobLogFileID)
-	if newJob,err = job.NewJob(&destHost,&port,&jobRate,&jobSyslogFacility,&jobSyslogSeverity,&sourceHost,&logFileName,make(chan jobmsg.JobMsg,4096)); err != nil {
+	if newJob,err = job.NewJob(&destHost,&port,&jobRate,&jobSyslogFacility,&jobSyslogSeverity,&sourceHost,&logFileName,make(chan jobmsg.JobMsg,4096),jobMaxCount); err != nil {
 		log.Println(err,logFileName)
 	} else {
 		newJob.SetID(jobLogFileID)
 		h.jobMgr.MainChannel <- newJob
 	}
-	fmt.Fprintf(w, "Hi there, I love %s!", req.URL.Path[1:])
+	fmt.Fprintf(w, "{\"status\":\"%s\"}", "OK")
+	log.Println("Start job for log file ",logFileName)
 }
 
 /*stopJob stops log job*/
@@ -150,6 +162,7 @@ func (h *Handler) stopJob(w http.ResponseWriter, req *http.Request){
 	newMsg := jobmsg.JobMsg{ID:ID,Action:jobmsg.Stop}
 	h.ctrlChan <- newMsg
 	fmt.Fprintf(w, "{\"id\":%d}", IDint)
+	log.Println("Stop job for log ID: ",ID)
 }
 
 /*statusJob checks job status*/
@@ -224,7 +237,7 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 		<div id="logTable">
 		<table>
 			<thead>
-			<tr class="headRow"><th>File Name</th><th>Status</th><th>Rate</th><th>Syslog Facility</th><th>Syslog Priority</th><th>Destination Host</th><th>Source Host Name</th><th>Action</th><th>Stats</th></tr>
+			<tr class="headRow"><th>File Name</th><th>Status</th><th>Rate (EPS)</th><th>Syslog Facility</th><th>Syslog Priority</th><th>Destination Host</th><th>Source Host Name</th><th>Timer</th><th>Action</th><th>Stats</th></tr>
 		</thead>
 			<tbody>
 			{{ range . }}
@@ -293,6 +306,18 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 						<input type="text" id="sourceHost{{.ID}}">
 					</td>
 					<td>
+						<select id="maxCount{{.ID}}">
+							<option value="300">5 Min</option>
+							<option value="600">10 Min</option>
+							<option value="900">15 Min</option>
+							<option value="1200">20 Min</option>
+							<option value="1500">25 Min</option>
+							<option value="1800">30 Min</option>
+							<option value="3600">1 Hour</option>
+							<option value="0">Forever</option>
+						</select>
+					</td>
+					<td>
 						<button id="item{{.ID}}" type="button" data-type="start" data-id="{{.ID}}">Start</button>
 						<button id="item{{.ID}}" type="button" data-type="stop" data-id="{{.ID}}">Stop</button>
 					</td>
@@ -304,29 +329,30 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 		</div>
 			<script src="/js/jquery.js"></script>
 			<script type="application/javascript">
-				window.onload = function() {
 
+				window.onload = function() {
 					var timeoutID = window.setInterval(function(){
+						$("td[id*='status']").removeClass("green").addClass("red");
+						$("td[id*='stats']").empty().append("None");
 						$.ajax({
 							type: "GET",
 							url: "job/list",
 							dataType:"json",
 							success: function(data,textStatus,jqxhr) {
 								for (var i = 0; i < data.jobList.length; i++) {
-									$("#status" + data.jobList[i]).removeClass("red");
 									$("#status" + data.jobList[i]).addClass("green");
 									$.ajax({
 										type:"GET",
 										url:"job/stats/" + data.jobList[i],
 										dataType: "json",
 										success: function(data,textStatus,jqxhr) {
-											$("#stats" + data.id).empty().append("<div>Count: " + data.count + " Rate: " + data.rate + " </div>");
+											$("#stats" + data.id).empty().append("<div> Count: " + data.count + " Rate: " + data.rate + "/s </div>");
 										}
 									})
 								}
 							}
 						});
-					},3000);
+					},5000);
 
 					$( "button[id*='item']" ).click(function() {
 						var itemid = $(this).data("id");
@@ -343,7 +369,8 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 									destHost: $("#destHost"+itemid).val(),
 									logFileID: $(this).data("id"),
 									protocol: "udp",
-									sourceHost: $("#sourceHost"+itemid).val()
+									sourceHost: $("#sourceHost"+itemid).val(),
+									maxCount: $("#maxCount"+itemid).val()
 								},
 								success: function(data,textStatus,jqxhr){},
 								dataType: "json"
@@ -371,7 +398,7 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 `
 	//UI lines
 	// DEST HOST, LOG List combo box, syslog facility (combo), syslog priority (combo), src host, protocol, rate, stop and start toggle button
-	t := template.New("TEST TEMP")
+	t := template.New("MAIN")
 	t, _ = t.Parse(HTML_DATA)
 	t.Execute(w,h.logFiles)
 }

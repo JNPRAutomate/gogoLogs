@@ -27,9 +27,15 @@ type Job struct {
   StatsChannel chan statsmsg.StatsMsg
   CtrlChannel chan jobmsg.JobMsg
   conn net.Conn
+  jTimer JobTimer
 }
 
-func NewJob(dip *string, dport *string,r *int, sf *int, ss *int, sh *string, file *string, cc chan jobmsg.JobMsg) (Job,error) {
+type JobTimer struct {
+  MaxCount uint
+  CurrentCount uint
+}
+
+func NewJob(dip *string, dport *string,r *int, sf *int, ss *int, sh *string, file *string, cc chan jobmsg.JobMsg, mc uint) (Job,error) {
   destAddr, err := net.ResolveUDPAddr("udp", *dip+":"+*dport)
   con, err := net.DialUDP("udp", nil, destAddr)
   j := Job{
@@ -40,6 +46,7 @@ func NewJob(dip *string, dport *string,r *int, sf *int, ss *int, sh *string, fil
     fileName: file,
     CtrlChannel: cc,
     conn:con,
+    jTimer: JobTimer{MaxCount:mc,CurrentCount:0},
   }
   err = j.openFile()
   return j,err
@@ -86,7 +93,6 @@ func (j *Job) Start(){
   totalSent = 0
 
   for _ = range ticker.C {
-    log.Println("Tick JobID",j.ID)
     select {
       //Check for close requests
       case newJobMsg := <-j.CtrlChannel:
@@ -107,16 +113,29 @@ func (j *Job) Start(){
           }
           msg := message.NewMessage(j.sourceHost, j.syslogFacility, j.syslogSeverity)
           msg.AddToMessage(string(lineBuffer))
-          log.Println(msg)
           msg.Send(j.conn)
           totalSent = totalSent + 1
           sendRate = sendRate + 1
         }
+        j.jTimer.CurrentCount = j.jTimer.CurrentCount + 1;
         //send stats here
         // sentRate, totalSent, jobID
         //reset sent rate
         j.StatsChannel <- statsmsg.StatsMsg{ID:j.ID,TotalSent: totalSent, SendRate: sendRate}
         sendRate = 0
+        //Check timer
+        if j.jTimer.MaxCount > 0 {
+          if j.jTimer.CurrentCount == j.jTimer.MaxCount {
+            //exit its max life
+            //message job manager
+            j.StatsChannel <- statsmsg.StatsMsg{ID:j.ID,TotalSent: 0, SendRate: 0}
+            return
+          } else {
+            //increment timer
+          }
+        } else {
+          //increment timer
+        }
     }
   }
 }

@@ -5,7 +5,6 @@ import (
   "lib/stats/statsmsg"
   "lib/stats"
   "lib/job"
-  "log"
 )
 
 type JobMgr struct {
@@ -50,10 +49,17 @@ func(jm *JobMgr) Run() {
         }
         //remove job hook from slice
         delete(jm.JobHooks,newJobMsg.ID)
+        delete(jm.Stats,newJobMsg.ID)
       case newStatsMsg := <- jm.StatsChannel:
-        delete(jm.Stats,newStatsMsg.ID)
-        jm.Stats[newStatsMsg.ID] = stats.Stats{Count:newStatsMsg.TotalSent,Rate:newStatsMsg.SendRate}
-        log.Println(jm.Stats[newStatsMsg.ID])
+        //receiving message back to stop job
+        //this is a hack and it should be done better
+        if newStatsMsg.TotalSent == 0 && newStatsMsg.SendRate == 0 && newStatsMsg.ID != "" {
+          delete(jm.JobHooks,newStatsMsg.ID)
+          delete(jm.Stats,newStatsMsg.ID)
+        } else {
+          delete(jm.Stats,newStatsMsg.ID)
+          jm.Stats[newStatsMsg.ID] = stats.Stats{Count:newStatsMsg.TotalSent,Rate:newStatsMsg.SendRate}
+        }
     }
   }
 }

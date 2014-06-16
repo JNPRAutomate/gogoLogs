@@ -77,6 +77,7 @@ func main() {
 					if err != nil {
 						//log.Println(err)
 						if *nonStop {
+							file.Close()
 							file, _ := os.Open(*fileName)
 							fileRead = bufio.NewReader(file)
 							lineBuffer, _, err = fileRead.ReadLine()
