@@ -71,7 +71,7 @@ func (j *Job) openFile() error {
   if err != nil {
     //handle file error
     //report back that the file cant be opened and why
-    log.Println(err)
+    //log.Println(err)
     err = errors.New("Unable to open file")
   }
   j.fileHandle = file
@@ -106,7 +106,7 @@ func (j *Job) Start(){
           lineBuffer, _, err := fileRead.ReadLine()
           if err != nil {
             j.fileHandle.Close()
-            log.Println(err)
+            //log.Println(err)
             j.openFile()
             fileRead = bufio.NewReader(j.fileHandle)
             lineBuffer, _, err = fileRead.ReadLine()
