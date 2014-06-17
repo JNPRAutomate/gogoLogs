@@ -50,6 +50,7 @@ func NewHandler(cc chan jobmsg.JobMsg, sc chan stats.Stats, p int, ld string) Ha
 
 func (h *Handler) listFiles() {
 	filepath.Walk(h.LogDir, func(path string, info os.FileInfo, err error) error {
+        //do error checking to ensure that the files exist. getting error messages here for non-existing files
     if (!info.IsDir()) {
 			newFile := File{Info:info,Path:path,ID:len(h.logFiles)}
       h.logFiles = append(h.logFiles,newFile)
