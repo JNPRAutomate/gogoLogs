@@ -7,7 +7,6 @@ import (
   "math/rand"
   "time"
   "bufio"
-  "log"
   "strconv"
   "lib/message"
   "lib/job/jobmsg"
@@ -23,6 +22,7 @@ type Job struct {
   syslogSeverity *int
   sourceHost *string
   fileName *string
+  fileSize int64
   fileHandle *os.File
   StatsChannel chan statsmsg.StatsMsg
   CtrlChannel chan jobmsg.JobMsg
@@ -67,14 +67,26 @@ func (j *Job) SetID(id int) {
 }
 
 func (j *Job) openFile() error {
-  file, err := os.Open(*j.fileName)
+  var file *os.File
+  var err error
+  var fileStats os.FileInfo
+  file, err = os.Open(*j.fileName)
   if err != nil {
     //handle file error
     //report back that the file cant be opened and why
     //log.Println(err)
     err = errors.New("Unable to open file")
+    return err
   }
   j.fileHandle = file
+
+  fileStats, err = file.Stat();
+  if err != nil {
+    err = errors.New("Unable to stat file")
+    return err
+  }
+  j.fileSize = fileStats.Size()
+
   return err
 }
 

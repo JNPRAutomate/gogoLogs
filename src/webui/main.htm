@@ -23,7 +23,7 @@
       }
       #logTable {
         margin: 0 auto;
-        width: 75%;
+        width: 80%;
       }
       .headRow {
         background-color: #6C90B2;
@@ -47,12 +47,13 @@
     <div id="logTable">
     <table>
       <thead>
-      <tr class="headRow"><th>File Name</th><th>Status</th><th>Rate</th><th>Syslog Facility</th><th>Syslog Priority</th><th>Destination Host</th><th>Source Host Name</th><th>Action</th><th>Stats</th></tr>
+      <tr class="headRow"><th>File Name</th><th>File Size</th><th>Status</th><th>Rate (EPS)</th><th>Syslog Facility</th><th>Syslog Priority</th><th>Destination Host</th><th>Source Host Name</th><th>Timer</th><th>Action</th><th>Stats</th></tr>
     </thead>
       <tbody>
-      {{ range . }}
+      {{ range .LogFiles }}
         <tr class="logRow" id="item{{ .ID }}">
           <td class="tdalign">{{ .Info.Name }} </td>
+          <td class="tdalign">{{ .Info.Size }} </td>
           <td id="status{{ .ID }}" class="red"></td>
           <td align="center">
             <select id="rate{{ .ID }}">
@@ -110,10 +111,38 @@
             </select>
           </td>
           <td align="center">
+            {{if (len .DestHosts) gt 0}}
+            <select id="destHost{{.ID}}">
+              {{ range .DestHosts }}
+                <option value="{{ . }}">{{ . }}</option>
+              {{ end }}
+            </select>
+            {{ else }}
             <input type="text" id="destHost{{.ID}}">
+            {{ end }}
           </td>
           <td align="center">
-            <input type="text" id="sourceHost{{.ID}}">
+            {{if (len .SourceNames) gt 0}}
+            <select id="sourceHost{{.ID}}">
+              {{ range .SourceNames }}
+                <option value="{{ . }}">{{ . }}</option>
+              {{ end }}
+            </select>
+            {{ else }}
+                <input type="text" id="sourceHost{{.ID}}">
+            {{ end }}
+          </td>
+          <td>
+            <select id="maxCount{{.ID}}">
+              <option value="300">5 Min</option>
+              <option value="600">10 Min</option>
+              <option value="900">15 Min</option>
+              <option value="1200">20 Min</option>
+              <option value="1500">25 Min</option>
+              <option value="1800">30 Min</option>
+              <option value="3600">1 Hour</option>
+              <option value="0">Forever</option>
+            </select>
           </td>
           <td>
             <button id="item{{.ID}}" type="button" data-type="start" data-id="{{.ID}}">Start</button>
@@ -127,29 +156,30 @@
     </div>
       <script src="/js/jquery.js"></script>
       <script type="application/javascript">
-        window.onload = function() {
 
+        window.onload = function() {
           var timeoutID = window.setInterval(function(){
+            $("td[id*='status']").removeClass("green").addClass("red");
+            $("td[id*='stats']").empty().append("None");
             $.ajax({
               type: "GET",
               url: "job/list",
               dataType:"json",
               success: function(data,textStatus,jqxhr) {
                 for (var i = 0; i < data.jobList.length; i++) {
-                  $("#status" + data.jobList[i]).removeClass("red");
                   $("#status" + data.jobList[i]).addClass("green");
                   $.ajax({
                     type:"GET",
                     url:"job/stats/" + data.jobList[i],
                     dataType: "json",
                     success: function(data,textStatus,jqxhr) {
-                      $("#stats" + data.id).empty().append("<div>Count: " + data.count + " Rate: " + data.rate + " </div>");
+                      $("#stats" + data.id).empty().append("<div> Count: " + data.count + " Rate: " + data.rate + "/s </div>");
                     }
                   })
                 }
               }
             });
-          },3000);
+          },5000);
 
           $( "button[id*='item']" ).click(function() {
             var itemid = $(this).data("id");
@@ -166,7 +196,8 @@
                   destHost: $("#destHost"+itemid).val(),
                   logFileID: $(this).data("id"),
                   protocol: "udp",
-                  sourceHost: $("#sourceHost"+itemid).val()
+                  sourceHost: $("#sourceHost"+itemid).val(),
+                  maxCount: $("#maxCount"+itemid).val()
                 },
                 success: function(data,textStatus,jqxhr){},
                 dataType: "json"

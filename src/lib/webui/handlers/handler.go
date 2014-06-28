@@ -32,10 +32,22 @@ type Handler struct {
 	ctrlChan chan jobmsg.JobMsg
 	statsChan chan stats.Stats
 	jobMgr jobmgr.JobMgr
+	uiopts UIOptions
+}
+
+type UIOptions struct {
+	destHosts []string
+	sourceNames []string
+}
+
+type TemplateData struct {
+	DestHosts []string
+	SourceNames []string
+	LogFiles []File
 }
 
 /*NewHandler creates new handler and returns in */
-func NewHandler(cc chan jobmsg.JobMsg, sc chan stats.Stats, p int, ld string) Handler {
+func NewHandler(cc chan jobmsg.JobMsg, sc chan stats.Stats, p int, ld string, destHosts []string, sourceNames []string) Handler {
 	jc := make(chan job.Job,4096)
 	h := Handler{
 		HttpPort:p,
@@ -44,6 +56,7 @@ func NewHandler(cc chan jobmsg.JobMsg, sc chan stats.Stats, p int, ld string) Ha
 		jobChan: jc,
 		jobMgr: jobmgr.NewJobMgr(jc, cc),
 		LogDir:ld,
+		uiopts: UIOptions{destHosts:destHosts,sourceNames:sourceNames},
 	}
 	return h
 }
@@ -214,7 +227,7 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 			}
 			#logTable {
 				margin: 0 auto;
-				width: 75%;
+				width: 80%;
 			}
 			.headRow {
 				background-color: #6C90B2;
@@ -235,18 +248,22 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 	</head>
 	<body>
 		<h1 class="title">gogoLogs - A log sending tool</h1>
+
 		<div id="logTable">
 		<table>
 			<thead>
-			<tr class="headRow"><th>File Name</th><th>Status</th><th>Rate (EPS)</th><th>Syslog Facility</th><th>Syslog Priority</th><th>Destination Host</th><th>Source Host Name</th><th>Timer</th><th>Action</th><th>Stats</th></tr>
+			<tr class="headRow"><th>File Name</th><th>File Size</th><th>Status</th><th>Rate (EPS)</th><th>Syslog Facility</th><th>Syslog Priority</th><th>Destination Host</th><th>Source Host Name</th><th>Timer</th><th>Action</th><th>Stats</th></tr>
 		</thead>
 			<tbody>
-			{{ range . }}
-				<tr class="logRow" id="item{{ .ID }}">
-					<td class="tdalign">{{ .Info.Name }} </td>
-					<td id="status{{ .ID }}" class="red"></td>
+			{{$DestHosts := .DestHosts}}
+			{{$SourceNames := .SourceNames}}
+			{{ range $log := .LogFiles }}
+				<tr class="logRow" id="item{{ $log.ID }}">
+					<td class="tdalign">{{ $log.Info.Name }} </td>
+					<td class="tdalign">{{ $log.Info.Size }} </td>
+					<td id="status{{ $log.ID }}" class="red"></td>
 					<td align="center">
-						<select id="rate{{ .ID }}">
+						<select id="rate{{ $log.ID }}">
 							<option value="1">1</option>
 							<option value="5">5</option>
 							<option value="10">10</option>
@@ -261,7 +278,7 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 						</select>
 					</td>
 					<td align="center">
-						<select id="syslogFacility{{.ID}}">
+						<select id="syslogFacility{{$log.ID}}">
 							<option value="0">kern</option>
 							<option value="1">user</option>
 							<option value="2">mail</option>
@@ -289,7 +306,7 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 						</select>
 					</td>
 					<td align="center">
-						<select id="syslogPriority{{.ID}}">
+						<select id="syslogPriority{{$log.ID}}">
 							<option value="0">Emergency</option>
 							<option value="1">Alert</option>
 							<option value="2">Critical</option>
@@ -301,13 +318,29 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 						</select>
 					</td>
 					<td align="center">
-						<input type="text" id="destHost{{.ID}}">
+						{{if (len $DestHosts) gt 0}}
+						<select id="destHost{{$log.ID}}">
+							{{ range $host := $DestHosts }}
+								<option value="{{ $host }}">{{ $host }}</option>
+							{{ end }}
+						</select>
+						{{ else }}
+						<input type="text" id="destHost{{$log.ID}}">
+						{{ end }}
 					</td>
 					<td align="center">
-						<input type="text" id="sourceHost{{.ID}}">
+						{{if (len $SourceNames) gt 0}}
+						<select id="sourceHost{{$log.ID}}">
+							{{ range $name := $SourceNames }}
+								<option value="{{ $name }}">{{ $name }}</option>
+							{{ end }}
+						</select>
+						{{ else }}
+								<input type="text" id="sourceHost{{$log.ID}}">
+						{{ end }}
 					</td>
 					<td>
-						<select id="maxCount{{.ID}}">
+						<select id="maxCount{{$log.ID}}">
 							<option value="300">5 Min</option>
 							<option value="600">10 Min</option>
 							<option value="900">15 Min</option>
@@ -319,10 +352,10 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 						</select>
 					</td>
 					<td>
-						<button id="item{{.ID}}" type="button" data-type="start" data-id="{{.ID}}">Start</button>
-						<button id="item{{.ID}}" type="button" data-type="stop" data-id="{{.ID}}">Stop</button>
+						<button id="item{{$log.ID}}" type="button" data-type="start" data-id="{{$log.ID}}">Start</button>
+						<button id="item{{$log.ID}}" type="button" data-type="stop" data-id="{{$log.ID}}">Stop</button>
 					</td>
-					<td align="center" id="stats{{.ID}}">None</td>
+					<td align="center" id="stats{{$log.ID}}">None</td>
 				</tr>
 			{{ end }}
 		</tbody>
@@ -395,13 +428,13 @@ func (h *Handler) manage(w http.ResponseWriter, req *http.Request) {
 			</script>
 	</body>
 </html>
-
 `
 	//UI lines
 	// DEST HOST, LOG List combo box, syslog facility (combo), syslog priority (combo), src host, protocol, rate, stop and start toggle button
 	t := template.New("MAIN")
 	t, _ = t.Parse(HTML_DATA)
-	t.Execute(w,h.logFiles)
+	td := &TemplateData{DestHosts:h.uiopts.destHosts,SourceNames:h.uiopts.sourceNames,LogFiles:h.logFiles}
+	t.Execute(w,*td)
 }
 
 func (h *Handler) jquery(w http.ResponseWriter, req *http.Request) {
